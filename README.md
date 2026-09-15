@@ -21,7 +21,7 @@ The only Linux driver that handled this was a paid one.
 
 ## What the patch does
 
-Seven hunks in `src/main/print-canon.c`:
+Nine hunks across `src/main/print-canon.c` and `src/main/canon-printers.h`:
 
 1. **`StpCDNoMask`** — a new boolean option, *"CD tray: no disc mask"*. When true the driver skips the
    circular disc/hub mask and dithers the whole square CD page (120 × 120 mm for `CD5Inch`).
@@ -29,8 +29,13 @@ Seven hunks in `src/main/print-canon.c`:
 2. **`StpCDXAdjustment` / `StpCDYAdjustment`** bounds widened from ±15 pt to **±120 pt (±42 mm)** so the
    printed block can be walked onto the physical card slots.
 
-Everything else — tray selection (`ESC (P … 0x5b` for tray J on the MX920 family), disc media codes,
-resolution modes — is stock Gutenprint.
+3. **MX920 disc mode** — Gutenprint only sends the disc-mode command `ESC (r 0x68` for a hard-coded list of
+   older models. The MX920 entry's own comment says it needs it, but it wasn't on the list and lacked the
+   `CANON_CAP_rr` capability that gates the code path, so the printer accepted disc jobs and silently discarded
+   them (IPP job "completed, 0 impressions"). The patch adds both.
+
+Everything else — tray selection (`ESC (P … 0x5b` for tray J), disc media codes, resolution modes — is stock
+Gutenprint.
 
 ## Install (Ubuntu / Debian)
 

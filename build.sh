@@ -20,7 +20,7 @@ SRC=$(ls -d gutenprint-*/ | head -1); cd "$SRC"
 if grep -q CDNoMask src/main/print-canon.c; then echo "== already patched"
 else patch -p1 < "$HERE/patches/gutenprint-5.3.4-cardtray.patch" || { echo "!! patch failed — try tools/apply-patch.py src/main/print-canon.c" >&2; exit 1; }
 fi
-# Give the build a HIGHER version than the archive (…+cardtray1). Without this the packages
+# Give the build a HIGHER version than the archive (…+cardtray2). Without this the packages
 # carry the stock version string: `dpkg -i` then silently clears any apt hold, and
 # unattended-upgrades will "upgrade" same-version → same-version from the archive and wipe
 # the patch (this happened 2026-09-15). A local suffix makes the archive never a candidate.
@@ -29,7 +29,7 @@ if ! head -1 debian/changelog | grep -q '+cardtray'; then
 import re,email.utils
 p="debian/changelog"; s=open(p).read()
 pkg,ver,dist,_=re.match(r'(\S+) \(([^)]+)\) (\S+); urgency=(\S+)', s).groups()
-s=(f"{pkg} ({ver}+cardtray1) {dist}; urgency=medium\n\n  * Local build: Canon CD-tray patch for PVC card trays "
+s=(f"{pkg} ({ver}+cardtray2) {dist}; urgency=medium\n\n  * Local build: Canon CD-tray patch for PVC card trays "
    f"(StpCDNoMask, CD X/Y adjustment ±120pt). https://github.com/jphein/gutenprint-cardtray\n\n"
    f" -- gutenprint-cardtray build.sh <noreply@localhost>  {email.utils.formatdate(localtime=True)}\n\n")+s
 open(p,"w").write(s)

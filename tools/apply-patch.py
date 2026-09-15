@@ -6,7 +6,7 @@ circular disc/hub mask in CD-tray mode so a rectangular block (two CR80 cards)
 prints on the full 120x120 mm CD page, and widens the CD X/Y fine adjustment
 from ±15 pt to ±120 pt (±42 mm) so the block can be moved onto the card slots.
 
-  ./patch-gutenprint-cardtray.py <gutenprint-src>/src/main/print-canon.c
+  ./patch-gutenprint-cardtray.py <gutenprint-src>/src/main/print-canon.c [<gutenprint-src>/src/main/canon-printers.h]
 """
 import re, sys
 p = sys.argv[1]; s = open(p).read(); n0 = s
@@ -68,7 +68,20 @@ s = s.replace('''    stp_dither(v, y, duplicate_line, zero_mask, cd_mask);''',
 s = s.replace('''  unsigned char *cd_mask = NULL;''', '''  unsigned char *cd_mask = NULL;
   int no_cd_mask = 0;''', 1)
 
+# 5. MX920 family: emit ESC (r 0x68 in CD mode like its siblings (the model also needs CANON_CAP_rr, see below)
+old5 = ('!(strcmp(init->caps->name,"PIXMA MG8200")) || !(strcmp(init->caps->name,"PIXMA TS8000")) ) ) {\n'
+        '      canon_cmd(v,ESC28,0x72, 1, 0x68); /* same as above case? */')
+assert s.count(old5) == 1, "ESC (r CD-mode list anchor not found exactly once"
+s = s.replace(old5, old5.replace('"PIXMA TS8000")) ) ) {', '"PIXMA TS8000")) || !(strcmp(init->caps->name,"PIXMA MX920")) ) ) {'), 1)
+
 changes = sum(1 for a, b in zip(n0.splitlines(), s.splitlines()) if a != b) + abs(len(s.splitlines()) - len(n0.splitlines()))
-for anchor in ('"CDNoMask", N_', 'strcmp(name, "CDNoMask")', 'dimension.upper = 120;', 'no_cd_mask = stp_get_boolean', '!no_cd_mask)', 'no_cd_mask ? NULL', 'int no_cd_mask = 0'):
+for anchor in ('"CDNoMask", N_', 'strcmp(name, "CDNoMask")', 'dimension.upper = 120;', 'no_cd_mask = stp_get_boolean', '!no_cd_mask)', 'no_cd_mask ? NULL', 'int no_cd_mask = 0', '"PIXMA MX920")) ) ) {'):
     assert anchor in s, f"missing: {anchor}"
 open(p, "w").write(s); print(f"patched {p} (~{changes} lines changed)")
+
+if len(sys.argv) > 2:  # canon-printers.h: MX920 gets CANON_CAP_rr so canon_init_setX72 runs for it
+    h = sys.argv[2]; t = open(h).read()
+    oldh = "CANON_CAP_STD0|CANON_CAP_DUPLEX|CANON_CAP_r|CANON_CAP_px|CANON_CAP_P|CANON_CAP_I|CANON_CAP_v|CANON_CAP_XML|CANON_CAP_BORDERLESS,0,\n    3,9, /* ESC (l and (P command lengths */\n    1, /* Upper/Lower Cassette option */"
+    assert t.count(oldh) == 1, "MX920 model entry anchor not found exactly once"
+    t = t.replace(oldh, oldh.replace("CANON_CAP_r|CANON_CAP_px", "CANON_CAP_r|CANON_CAP_rr|CANON_CAP_px"), 1)
+    open(h, "w").write(t); print(f"patched {h} (MX920 += CANON_CAP_rr)")

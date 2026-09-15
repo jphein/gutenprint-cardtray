@@ -37,6 +37,15 @@
    else if (strcmp(name, "Duplex") == 0)
    {
      int offer_duplex=0;
+@@ -5101,7 +5113,7 @@
+       canon_cmd(v,ESC28,0x72, 1, 0x68);
+     }
+     /* CD mode only -- no ESC (r at all otherwise */
+-    else if ( (init->mode->flags & MODE_FLAG_CD) && ( !(strcmp(init->caps->name,"PIXMA iP4900")) || !(strcmp(init->caps->name,"PIXMA MG5200")) || !(strcmp(init->caps->name,"PIXMA MG5300")) || !(strcmp(init->caps->name,"PIXMA MG6200")) || !(strcmp(init->caps->name,"PIXMA MG8200")) || !(strcmp(init->caps->name,"PIXMA TS8000")) ) ) {
++    else if ( (init->mode->flags & MODE_FLAG_CD) && ( !(strcmp(init->caps->name,"PIXMA iP4900")) || !(strcmp(init->caps->name,"PIXMA MG5200")) || !(strcmp(init->caps->name,"PIXMA MG5300")) || !(strcmp(init->caps->name,"PIXMA MG6200")) || !(strcmp(init->caps->name,"PIXMA MG8200")) || !(strcmp(init->caps->name,"PIXMA TS8000")) || !(strcmp(init->caps->name,"PIXMA MX920")) ) ) {
+       canon_cmd(v,ESC28,0x72, 1, 0x68); /* same as above case? */
+     }
+     /* other cases here */
 @@ -5909,6 +5921,7 @@
  #endif
    double        k_upper, k_lower;
@@ -71,3 +80,14 @@
      if ( privdata.mode->flags & MODE_FLAG_WEAVE )
          stp_write_weave(v, weave_cols);
      else if ( caps->features & CANON_CAP_I)
+--- a/src/main/canon-printers.h
++++ b/src/main/canon-printers.h
+@@ -3593,7 +3593,7 @@
+     INCH(17/2), INCH(14),       /* max paper width and height */ /* from linux driver v3.90 */
+     10, 10, 9, 15,    /*border_left, border_right, border_top, border_bottom */
+     &canon_PIXMA_MG5400_slotlist, /* iP7200 uses ESC (r 0x68 command for CD tray only */
+-    CANON_CAP_STD0|CANON_CAP_DUPLEX|CANON_CAP_r|CANON_CAP_px|CANON_CAP_P|CANON_CAP_I|CANON_CAP_v|CANON_CAP_XML|CANON_CAP_BORDERLESS,0,
++    CANON_CAP_STD0|CANON_CAP_DUPLEX|CANON_CAP_r|CANON_CAP_rr|CANON_CAP_px|CANON_CAP_P|CANON_CAP_I|CANON_CAP_v|CANON_CAP_XML|CANON_CAP_BORDERLESS,0,
+     3,9, /* ESC (l and (P command lengths */
+     1, /* Upper/Lower Cassette option */
+     control_cmd_PIXMA_MG5300,  /* features Uses ESC (r only for CD media */
