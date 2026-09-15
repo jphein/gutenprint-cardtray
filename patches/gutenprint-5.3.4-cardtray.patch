@@ -1,0 +1,73 @@
+--- a/src/main/print-canon.c
++++ b/src/main/print-canon.c
+@@ -387,6 +387,12 @@
+     STP_PARAMETER_LEVEL_BASIC, 1, 1, STP_CHANNEL_NONE, 1, 0
+   },
+   {
++    "CDNoMask", N_("CD tray: no disc mask"), "Color=No,Category=Basic Printer Setup",
++    N_("Print the whole square CD page without masking the disc shape (PVC card trays)"),
++    STP_PARAMETER_TYPE_BOOLEAN, STP_PARAMETER_CLASS_FEATURE,
++    STP_PARAMETER_LEVEL_BASIC, 1, 1, STP_CHANNEL_NONE, 1, 0
++  },
++  {
+     "Duplex", N_("Double-Sided Printing"), "Color=No,Category=Basic Printer Setup",
+     N_("Duplex/Tumble Setting"),
+     STP_PARAMETER_TYPE_STRING_LIST, STP_PARAMETER_CLASS_FEATURE,
+@@ -2947,8 +2953,8 @@
+ 	   strcmp(name, "CDYAdjustment") == 0)
+     {
+       const char* input_slot = stp_get_string_parameter(v, "InputSlot");
+-      description->bounds.dimension.lower = -15;
+-      description->bounds.dimension.upper = 15;
++      description->bounds.dimension.lower = -120;
++      description->bounds.dimension.upper = 120;
+       description->deflt.dimension = 0;
+       if (!input_slot || !strcmp(input_slot,"CD"))
+ 	description->is_active = 1;
+@@ -3212,6 +3218,12 @@
+       else
+ 	description->is_active = 0;
+     }
++  else if (strcmp(name, "CDNoMask") == 0)
++    {
++      const char* input_slot = stp_get_string_parameter(v, "InputSlot");
++      description->deflt.boolean = 0;
++      description->is_active = (!input_slot || !strcmp(input_slot,"CD")) ? 1 : 0;
++    }
+   else if (strcmp(name, "Duplex") == 0)
+   {
+     int offer_duplex=0;
+@@ -5909,6 +5921,7 @@
+ #endif
+   double        k_upper, k_lower;
+   unsigned char *cd_mask = NULL;
++  int no_cd_mask = 0;
+   double outer_r_sq = 0;
+   double inner_r_sq = 0;
+   unsigned char* weave_cols[4] ; /* TODO clean up weaving code to be more generic */
+@@ -6290,6 +6303,7 @@
+   stp_allocate_component_data(v, "Driver", NULL, NULL, &privdata);
+ 
+   privdata.emptylines = 0;
++  no_cd_mask = stp_get_boolean_parameter(v, "CDNoMask");
+   if (print_cd) {
+     cd_mask = stp_malloc(1 + (privdata.out_width + 7) / 8);
+     outer_r_sq = (double)privdata.cd_outer_radius * (double)privdata.cd_outer_radius;
+@@ -6309,7 +6323,7 @@
+ 	  break;
+ 	}
+     }
+-    if (print_cd)
++    if (print_cd && !no_cd_mask)
+       {
+ 	int x_center = privdata.cd_outer_radius * privdata.mode->xdpi / 72;
+ 	int y_distance_from_center =
+@@ -6334,7 +6348,7 @@
+ 	      }
+ 	  }
+       }
+-    stp_dither(v, y, duplicate_line, zero_mask, cd_mask);
++    stp_dither(v, y, duplicate_line, zero_mask, no_cd_mask ? NULL : cd_mask);
+     if ( privdata.mode->flags & MODE_FLAG_WEAVE )
+         stp_write_weave(v, weave_cols);
+     else if ( caps->features & CANON_CAP_I)
