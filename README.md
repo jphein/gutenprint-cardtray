@@ -39,10 +39,15 @@ resolution modes — is stock Gutenprint.
 ./build.sh
 ```
 
-`build.sh` fetches the distro source package, applies the patch, builds with `dpkg-buildpackage`, installs
-`libgutenprint-common libgutenprint9 printer-driver-gutenprint`, **pins them with `apt-mark hold`** (so an
-update can't silently drop the patch), and regenerates the PPDs of existing Gutenprint queues.
+`build.sh` fetches the distro source package, applies the patch, **bumps the version to `…+cardtray1`**,
+builds with `dpkg-buildpackage`, installs `libgutenprint-common libgutenprint9 printer-driver-gutenprint`,
+pins them with `apt-mark hold`, and regenerates the PPDs of existing Gutenprint queues.
 Prebuilt `.deb`s for Ubuntu 26.04 are attached to the GitHub release.
+
+**Why the version bump matters** (learned the hard way, 2026-09-15): a patched build that keeps the stock
+version string is one `unattended-upgrades` run away from being replaced by the archive's identical-version
+package — and `dpkg -i` silently clears an existing `apt-mark hold`, so "I held it" is not enough. With the
+`+cardtray1` suffix the archive is never a candidate, and the hold is belt-and-braces.
 
 The Canon driver is a loadable module; `grep -a -c CDNoMask /usr/lib/*/gutenprint/5.3/modules/print-canon.so`
 prints `1` when the patched build is live.
