@@ -21,7 +21,7 @@ The only Linux driver that handled this was a paid one.
 
 ## What the patch does
 
-Twelve hunks across `src/main/print-canon.c` and `src/main/canon-printers.h`:
+Seventeen hunks across `src/main/print-canon.c`, `src/main/canon-printers.h` and `src/xml/papers/standard.xml`:
 
 1. **`StpCDNoMask`** — a new boolean option, *"CD tray: no disc mask"*. When true the driver skips the
    circular disc/hub mask and dithers the whole square CD page (120 × 120 mm for `CD5Inch`).
@@ -38,6 +38,12 @@ Twelve hunks across `src/main/print-canon.c` and `src/main/canon-printers.h`:
    command; the printer scans the tray and ejects it unprinted. The MX920 now takes the same path as the
    iP7200 (extended 46-byte `ESC (p` with the tray-J border adjustments), which is what Canon's own Windows
    driver sends — verified against a captured Canon job (`ESC (P`, `ESC (l`, `ESC (c`, `ESC (r` byte-identical).
+
+5. **`PageSize=TrayJ`** — a new page: the whole disc-tray face, 5.16 × 10.01 in, fed from the CD slot with
+   ordinary margins and no disc mask or disc centring. It is the page Brainstorm ID's templates and Canon's
+   "Disc Tray J" paper size describe, so their PDFs print unchanged:
+   `lp -o InputSlot=CD -o PageSize=TrayJ -o MediaType=DiscCompat -o Resolution=606x600dpi template.pdf`.
+   Offered for the MX920 and iP7200 (tray J models).
 
 Everything else — disc media codes, resolution modes — is stock Gutenprint.
 

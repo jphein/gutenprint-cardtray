@@ -13,7 +13,25 @@
      "Duplex", N_("Double-Sided Printing"), "Color=No,Category=Basic Printer Setup",
      N_("Duplex/Tumble Setting"),
      STP_PARAMETER_TYPE_STRING_LIST, STP_PARAMETER_CLASS_FEATURE,
-@@ -2947,8 +2953,8 @@
+@@ -2636,6 +2642,7 @@
+       /* media size codes for CD (and other media depending on printer model */
+ 
+       if (!strcmp(name,"CD5Inch"))     return 0x53; /* CD Tray G --- arbitrary choice here, modify in ESC (P command */
++      if (!strcmp(name,"TrayJ"))       return 0x53; /* full-face disc tray page: same CD workaround path (-> 0x5b for tray J models) */
+       /* if (!strcmp(name,"CD5Inch"))  return 0x56; */ /* CD Tray G-late */
+       /* if (!strcmp(name,"CD5Inch"))  return 0x57; */ /* CD Tray H */
+ 
+@@ -2877,6 +2884,9 @@
+           (description->bounds.str, "CD3Inch", _("CD - 3 inch"));
+         stp_string_list_add_string
+           (description->bounds.str, "CDCustom", _("CD - Custom"));
++        if (!strcmp(caps->name,"PIXMA MX920") || !strcmp(caps->name,"PIXMA iP7200"))
++          stp_string_list_add_string
++            (description->bounds.str, "TrayJ", _("Disc Tray J - full face"));
+       }else{
+ 	  const stp_papersize_list_t *paper_sizes =
+ 	    stpi_get_standard_papersize_list();
+@@ -2947,8 +2957,8 @@
  	   strcmp(name, "CDYAdjustment") == 0)
      {
        const char* input_slot = stp_get_string_parameter(v, "InputSlot");
@@ -24,7 +42,7 @@
        description->deflt.dimension = 0;
        if (!input_slot || !strcmp(input_slot,"CD"))
  	description->is_active = 1;
-@@ -3212,6 +3218,12 @@
+@@ -3212,6 +3222,12 @@
        else
  	description->is_active = 0;
      }
@@ -37,16 +55,25 @@
    else if (strcmp(name, "Duplex") == 0)
    {
      int offer_duplex=0;
-@@ -4186,7 +4198,7 @@
+@@ -3321,7 +3337,7 @@
+   if (media_size)
+     pt = stp_describe_papersize(v, media_size);
+ 
+-  if(input_slot && !strcmp(input_slot,"CD"))
++  if(input_slot && !strcmp(input_slot,"CD") && !(media_size && !strcmp(media_size,"TrayJ")))
+     cd = 1;
+ 
+   stp_default_media_size(v, &width, &length);
+@@ -4186,7 +4202,7 @@
    }
  
    /* Tray J */
 -  if ( (print_cd) && !(strcmp(init->caps->name,"PIXMA iP7200")) && (test_cd==1) ) {
-+  if ( (print_cd) && ( !(strcmp(init->caps->name,"PIXMA iP7200")) || !(strcmp(init->caps->name,"PIXMA MX920")) ) && (test_cd==1) ) {
++  if ( (print_cd) && ( !(strcmp(init->caps->name,"PIXMA iP7200")) || !(strcmp(init->caps->name,"PIXMA MX920")) ) && (test_cd==1) && !(stp_get_string_parameter(v, "PageSize") && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ")) ) {
  
      init->page_width +=8;
      init->page_height +=44;
-@@ -4243,7 +4255,7 @@
+@@ -4243,7 +4259,7 @@
  
    if ((init->caps->features & CANON_CAP_px) ) {
      /* workaround for CD writing that uses CANON_CAP_px --- fix with capabilities */
@@ -55,16 +82,16 @@
        /* need to check if iP9910, MP710, iP3000, Pro9000 use Esc (p */
        {
  
-@@ -4313,7 +4325,7 @@
+@@ -4313,7 +4329,7 @@
  	  border_bottom2 = border_bottom + adjust_tray_H_bottom;
  	}
  
 -	if ( (print_cd) && !(strcmp(init->caps->name,"PIXMA iP7200")) && (test_cd==1) ) {
-+	if ( (print_cd) && ( !(strcmp(init->caps->name,"PIXMA iP7200")) || !(strcmp(init->caps->name,"PIXMA MX920")) ) && (test_cd==1) ) {
++	if ( (print_cd) && ( !(strcmp(init->caps->name,"PIXMA iP7200")) || !(strcmp(init->caps->name,"PIXMA MX920")) ) && (test_cd==1) && !(stp_get_string_parameter(v, "PageSize") && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ")) ) {
  	  border_left2   = border_left + adjust_tray_J_left;
  	  border_right2  = border_right + adjust_tray_J_right;
  	  border_top2    = border_top + adjust_tray_J_top;
-@@ -5101,7 +5113,7 @@
+@@ -5101,7 +5117,7 @@
        canon_cmd(v,ESC28,0x72, 1, 0x68);
      }
      /* CD mode only -- no ESC (r at all otherwise */
@@ -73,7 +100,24 @@
        canon_cmd(v,ESC28,0x72, 1, 0x68); /* same as above case? */
      }
      /* other cases here */
-@@ -5909,6 +5921,7 @@
+@@ -5731,7 +5747,7 @@
+ static void setup_page(stp_vars_t* v,canon_privdata_t* privdata){
+   const char *media_source = stp_get_string_parameter(v, "InputSlot");
+   const char *cd_type = stp_get_string_parameter(v, "PageSize");
+-  int print_cd = (media_source && (!strcmp(media_source, "CD")));
++  int print_cd = (media_source && (!strcmp(media_source, "CD")) && !(stp_get_string_parameter(v, "PageSize") && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ")));
+   stp_dimension_t page_left,
+                   page_top,
+                   page_right,
+@@ -5902,13 +5918,14 @@
+ 		out_channels;	/* Output bytes per pixel */
+ #endif
+   unsigned	zero_mask;
+-  int           print_cd = (media_source && (!strcmp(media_source, "CD")));
++  int           print_cd = (media_source && (!strcmp(media_source, "CD")) && !(stp_get_string_parameter(v, "PageSize") && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ")));
+   int           image_height;
+ #if 0
+   int           image_width;
  #endif
    double        k_upper, k_lower;
    unsigned char *cd_mask = NULL;
@@ -81,7 +125,7 @@
    double outer_r_sq = 0;
    double inner_r_sq = 0;
    unsigned char* weave_cols[4] ; /* TODO clean up weaving code to be more generic */
-@@ -6290,6 +6303,7 @@
+@@ -6290,6 +6307,7 @@
    stp_allocate_component_data(v, "Driver", NULL, NULL, &privdata);
  
    privdata.emptylines = 0;
@@ -89,7 +133,7 @@
    if (print_cd) {
      cd_mask = stp_malloc(1 + (privdata.out_width + 7) / 8);
      outer_r_sq = (double)privdata.cd_outer_radius * (double)privdata.cd_outer_radius;
-@@ -6309,7 +6323,7 @@
+@@ -6309,7 +6327,7 @@
  	  break;
  	}
      }
@@ -98,7 +142,7 @@
        {
  	int x_center = privdata.cd_outer_radius * privdata.mode->xdpi / 72;
  	int y_distance_from_center =
-@@ -6334,7 +6348,7 @@
+@@ -6334,7 +6352,7 @@
  	      }
  	  }
        }
@@ -118,3 +162,23 @@
      3,9, /* ESC (l and (P command lengths */
      1, /* Upper/Lower Cassette option */
      control_cmd_PIXMA_MG5300,  /* features Uses ESC (r only for CD media */
+--- a/src/xml/papers/standard.xml
++++ b/src/xml/papers/standard.xml
+@@ -94,6 +94,17 @@
+       <height value="329"/>
+       <unit value="english"/>
+     </paper>
++    <paper name="TrayJ">
++      <description translate="value" value="Disc Tray J - full face"/>
++      <comment value="Canon disc tray J, whole tray face 5.16x10.01in (PVC card trays)"/>
++      <width value="371.52"/>
++      <height value="720.72"/>
++      <left value="9.6"/>
++      <right value="12.2"/>
++      <top value="8.4"/>
++      <bottom value="97.2"/>
++      <unit value="english"/>
++    </paper>
+     <paper name="CD3Inch">
+       <description translate="value" value="CD - 3 inch"/>
+       <comment value="CD, 65mm diameter"/>
