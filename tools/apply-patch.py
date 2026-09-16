@@ -117,8 +117,47 @@ a13 = '      if (!strcmp(name,"CD5Inch"))     return 0x53; /* CD Tray G --- arbi
 assert s.count(a13) == 1, "size-type anchor"
 s = s.replace(a13, a13 + '\n      if (!strcmp(name,"TrayJ"))       return 0x53; /* full-face disc tray page: same CD workaround path (-> 0x5b for tray J models) */', 1)
 
+# 13-16. TrayJ geometry on the MX920: Canon's own tray-J page (3071x5311 @600 via the size table), Canon's origin
+#        (80,70) shifted +24 dots right (measured), Canon's printable area 2911x5122 minus that shift.
+a13 = '''  int print_cd = (input_slot && (!strcmp(input_slot, "CD")));
+
+  stp_dprintf(STP_DBG_CANON, v,"setPageMargins2: print_cd = %d\\n",print_cd);'''
+assert s.count(a13) == 1, "setPageMargins2 print_cd anchor"
+s = s.replace(a13, '''  int print_cd = (input_slot && (!strcmp(input_slot, "CD")));
+  int trayj_mx920 = 0; /* MX920 + PageSize=TrayJ: whole-tray-face page, Canon-matching geometry */
+
+  stp_dprintf(STP_DBG_CANON, v,"setPageMargins2: print_cd = %d\\n",print_cd);
+  /* MX920: CD pages report 0x53 (tray G placeholder) here; the ESC (P workaround later maps it to 0x5b (tray J).
+     Do the same for the paper-size table so fix_papersize() yields Canon's 3071x5311 tray-J page. */
+  if ( print_cd && !(strcmp(init->caps->name,"PIXMA MX920")) && arg_ESCP_1 == 0x53 )
+    arg_ESCP_1 = 0x5b;''', 1)
+a14 = '''	/* this does not seem to need adjustment, so use original borders */
+	area_right = border_left * unit / 72;
+	area_top = border_top * unit / 72;'''
+assert s.count(a14) == 1, "area_right/top anchor"
+s = s.replace(a14, a14 + '''
+	/* TrayJ (whole tray face) on MX920: Canon's own tray-J origin is (80,70) @600dpi; +24 dots right = the measured 1 mm */
+	trayj_mx920 = ( !(strcmp(init->caps->name,"PIXMA MX920")) && stp_get_string_parameter(v, "PageSize") && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ") );
+	if ( trayj_mx920 ) {
+	  area_right = 104;
+	  area_top = 70;
+	}''', 1)
+a15 = '''	  if ( (print_cd) && (test_cd==1) ) { /* bordered for CD */
+	    stp_put32_be(init->page_width * unit / 72,v); /* area_width */
+	    stp_put32_be(init->page_height * unit / 72,v); /* area_length */
+	  }'''
+assert s.count(a15) == 1, "area width/length anchor"
+s = s.replace(a15, '''	  if ( trayj_mx920 ) { /* TrayJ: Canon's printable area 2911x5122 minus the 24-dot right shift */
+	    stp_put32_be(2887,v); /* area_width */
+	    stp_put32_be(5122,v); /* area_length */
+	  }
+	  else if ( (print_cd) && (test_cd==1) ) { /* bordered for CD */
+	    stp_put32_be(init->page_width * unit / 72,v); /* area_width */
+	    stp_put32_be(init->page_height * unit / 72,v); /* area_length */
+	  }''', 1)
+
 changes = sum(1 for a, b in zip(n0.splitlines(), s.splitlines()) if a != b) + abs(len(s.splitlines()) - len(n0.splitlines()))
-for anchor in ('"CDNoMask", N_', 'strcmp(name, "CDNoMask")', 'dimension.upper = 120;', 'no_cd_mask = stp_get_boolean', '!no_cd_mask)', 'no_cd_mask ? NULL', 'int no_cd_mask = 0', '"PIXMA MX920")) ) ) {', '"PIXMA MX920")) ) && (test_cd==1) && !(stp_get_string_parameter(v, "PageSize")', '"PIXMA MX920")) || !(strcmp(init->caps->name,"PIXMA MP980"))', '"TrayJ", _("Disc Tray J - full face")', 'strcmp(media_size,"TrayJ")', 'if (!strcmp(name,"TrayJ"))'):
+for anchor in ('"CDNoMask", N_', 'strcmp(name, "CDNoMask")', 'dimension.upper = 120;', 'no_cd_mask = stp_get_boolean', '!no_cd_mask)', 'no_cd_mask ? NULL', 'int no_cd_mask = 0', '"PIXMA MX920")) ) ) {', '"PIXMA MX920")) ) && (test_cd==1) && !(stp_get_string_parameter(v, "PageSize")', '"PIXMA MX920")) || !(strcmp(init->caps->name,"PIXMA MP980"))', '"TrayJ", _("Disc Tray J - full face")', 'strcmp(media_size,"TrayJ")', 'if (!strcmp(name,"TrayJ"))', 'trayj_mx920', 'stp_put32_be(2887,v)'):
     assert anchor in s, f"missing: {anchor}"
 open(p, "w").write(s); print(f"patched {p} (~{changes} lines changed)")
 
@@ -139,9 +178,9 @@ if len(sys.argv) > 3:  # papers XML: define the TrayJ paper (5.16x10.01 in, Cano
       <width value="371.52"/>
       <height value="720.72"/>
       <left value="9.6"/>
-      <right value="12.2"/>
-      <top value="8.4"/>
-      <bottom value="97.2"/>
+      <right value="15.4"/>
+      <top value="50.8"/>
+      <bottom value="55.3"/>
       <unit value="english"/>
     </paper>
 ''' + anchor, 1)

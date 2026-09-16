@@ -64,7 +64,21 @@
      cd = 1;
  
    stp_default_media_size(v, &width, &length);
-@@ -4186,7 +4202,7 @@
+@@ -3846,8 +3862,13 @@
+ 
+   const char* input_slot = stp_get_string_parameter(v, "InputSlot");
+   int print_cd = (input_slot && (!strcmp(input_slot, "CD")));
++  int trayj_mx920 = 0; /* MX920 + PageSize=TrayJ: whole-tray-face page, Canon-matching geometry */
+ 
+   stp_dprintf(STP_DBG_CANON, v,"setPageMargins2: print_cd = %d\n",print_cd);
++  /* MX920: CD pages report 0x53 (tray G placeholder) here; the ESC (P workaround later maps it to 0x5b (tray J).
++     Do the same for the paper-size table so fix_papersize() yields Canon's 3071x5311 tray-J page. */
++  if ( print_cd && !(strcmp(init->caps->name,"PIXMA MX920")) && arg_ESCP_1 == 0x53 )
++    arg_ESCP_1 = 0x5b;
+ 
+   test_cd = 1;
+   /*
+@@ -4186,7 +4207,7 @@
    }
  
    /* Tray J */
@@ -73,7 +87,7 @@
  
      init->page_width +=8;
      init->page_height +=44;
-@@ -4243,7 +4259,7 @@
+@@ -4243,7 +4264,7 @@
  
    if ((init->caps->features & CANON_CAP_px) ) {
      /* workaround for CD writing that uses CANON_CAP_px --- fix with capabilities */
@@ -82,7 +96,7 @@
        /* need to check if iP9910, MP710, iP3000, Pro9000 use Esc (p */
        {
  
-@@ -4313,7 +4329,7 @@
+@@ -4313,7 +4334,7 @@
  	  border_bottom2 = border_bottom + adjust_tray_H_bottom;
  	}
  
@@ -91,7 +105,33 @@
  	  border_left2   = border_left + adjust_tray_J_left;
  	  border_right2  = border_right + adjust_tray_J_right;
  	  border_top2    = border_top + adjust_tray_J_top;
-@@ -5101,7 +5117,7 @@
+@@ -4330,6 +4351,12 @@
+ 	/* this does not seem to need adjustment, so use original borders */
+ 	area_right = border_left * unit / 72;
+ 	area_top = border_top * unit / 72;
++	/* TrayJ (whole tray face) on MX920: Canon's own tray-J origin is (80,70) @600dpi; +24 dots right = the measured 1 mm */
++	trayj_mx920 = ( !(strcmp(init->caps->name,"PIXMA MX920")) && stp_get_string_parameter(v, "PageSize") && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ") );
++	if ( trayj_mx920 ) {
++	  area_right = 104;
++	  area_top = 70;
++	}
+ 
+ 	if ( (init->caps->features & CANON_CAP_BORDERLESS) &&
+ 	     !(print_cd) && stp_get_boolean_parameter(v, "FullBleed") ) {
+@@ -4375,7 +4402,11 @@
+ 	  stp_put32_be((init->page_height - border_top2 - border_bottom2 ) * unit / 72,v); /* area_length */
+ 	}
+ 	else {
+-	  if ( (print_cd) && (test_cd==1) ) { /* bordered for CD */
++	  if ( trayj_mx920 ) { /* TrayJ: Canon's printable area 2911x5122 minus the 24-dot right shift */
++	    stp_put32_be(2887,v); /* area_width */
++	    stp_put32_be(5122,v); /* area_length */
++	  }
++	  else if ( (print_cd) && (test_cd==1) ) { /* bordered for CD */
+ 	    stp_put32_be(init->page_width * unit / 72,v); /* area_width */
+ 	    stp_put32_be(init->page_height * unit / 72,v); /* area_length */
+ 	  }
+@@ -5101,7 +5132,7 @@
        canon_cmd(v,ESC28,0x72, 1, 0x68);
      }
      /* CD mode only -- no ESC (r at all otherwise */
@@ -100,7 +140,7 @@
        canon_cmd(v,ESC28,0x72, 1, 0x68); /* same as above case? */
      }
      /* other cases here */
-@@ -5731,7 +5747,7 @@
+@@ -5731,7 +5762,7 @@
  static void setup_page(stp_vars_t* v,canon_privdata_t* privdata){
    const char *media_source = stp_get_string_parameter(v, "InputSlot");
    const char *cd_type = stp_get_string_parameter(v, "PageSize");
@@ -109,7 +149,7 @@
    stp_dimension_t page_left,
                    page_top,
                    page_right,
-@@ -5902,13 +5918,14 @@
+@@ -5902,13 +5933,14 @@
  		out_channels;	/* Output bytes per pixel */
  #endif
    unsigned	zero_mask;
@@ -125,7 +165,7 @@
    double outer_r_sq = 0;
    double inner_r_sq = 0;
    unsigned char* weave_cols[4] ; /* TODO clean up weaving code to be more generic */
-@@ -6290,6 +6307,7 @@
+@@ -6290,6 +6322,7 @@
    stp_allocate_component_data(v, "Driver", NULL, NULL, &privdata);
  
    privdata.emptylines = 0;
@@ -133,7 +173,7 @@
    if (print_cd) {
      cd_mask = stp_malloc(1 + (privdata.out_width + 7) / 8);
      outer_r_sq = (double)privdata.cd_outer_radius * (double)privdata.cd_outer_radius;
-@@ -6309,7 +6327,7 @@
+@@ -6309,7 +6342,7 @@
  	  break;
  	}
      }
@@ -142,7 +182,7 @@
        {
  	int x_center = privdata.cd_outer_radius * privdata.mode->xdpi / 72;
  	int y_distance_from_center =
-@@ -6334,7 +6352,7 @@
+@@ -6334,7 +6367,7 @@
  	      }
  	  }
        }
@@ -174,9 +214,9 @@
 +      <width value="371.52"/>
 +      <height value="720.72"/>
 +      <left value="9.6"/>
-+      <right value="12.2"/>
-+      <top value="8.4"/>
-+      <bottom value="97.2"/>
++      <right value="15.4"/>
++      <top value="50.8"/>
++      <bottom value="55.3"/>
 +      <unit value="english"/>
 +    </paper>
      <paper name="CD3Inch">

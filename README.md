@@ -21,7 +21,7 @@ The only Linux driver that handled this was a paid one.
 
 ## What the patch does
 
-Seventeen hunks across `src/main/print-canon.c`, `src/main/canon-printers.h` and `src/xml/papers/standard.xml`:
+Twenty hunks across `src/main/print-canon.c`, `src/main/canon-printers.h` and `src/xml/papers/standard.xml`:
 
 1. **`StpCDNoMask`** — a new boolean option, *"CD tray: no disc mask"*. When true the driver skips the
    circular disc/hub mask and dithers the whole square CD page (120 × 120 mm for `CD5Inch`).
@@ -43,7 +43,12 @@ Seventeen hunks across `src/main/print-canon.c`, `src/main/canon-printers.h` and
    ordinary margins and no disc mask or disc centring. It is the page Brainstorm ID's templates and Canon's
    "Disc Tray J" paper size describe, so their PDFs print unchanged:
    `lp -o InputSlot=CD -o PageSize=TrayJ -o MediaType=DiscCompat -o Resolution=606x600dpi template.pdf`.
-   Offered for the MX920 and iP7200 (tray J models).
+   Offered for the MX920 and iP7200 (tray J models). On the MX920 the page is emitted with Canon's own tray-J
+   numbers (page 3071×5311, printable 2911×5122, origin 80,70 at 600 dpi) — captured from Canon's Windows driver —
+   with the PDF's card region mapped onto it through the paper margins, so a Brainstorm template lands where the
+   Windows driver puts it, at 100% scale. Measured on 2026-09-15: gutenprint's first attempt sat 15 mm high because
+   it declared a 10.01-in page and the printer positions the declared page on the tray; declaring Canon's 8.85-in
+   page fixed it. A 1 mm rightward correction is baked in as +24 dots.
 
 Everything else — disc media codes, resolution modes — is stock Gutenprint.
 
