@@ -1,6 +1,15 @@
 --- a/src/main/print-canon.c
 +++ b/src/main/print-canon.c
-@@ -387,6 +387,12 @@
+@@ -240,6 +240,8 @@
+   int top;
+   int left;
+   int emptylines;
++  int skip_empty_blocks;      /* MX920 CD mode: replace blank multiraster blocks with ESC (e advances (like Canon's driver) */
++  int pending_empty_blocks;
+   int ncolors; /* number of colors to print with */
+   int physical_xdpi, nozzle_ydpi, stepper_ydpi;
+   int nozzles;   /* count of inkjets for one pass */
+@@ -387,6 +389,12 @@
      STP_PARAMETER_LEVEL_BASIC, 1, 1, STP_CHANNEL_NONE, 1, 0
    },
    {
@@ -13,7 +22,7 @@
      "Duplex", N_("Double-Sided Printing"), "Color=No,Category=Basic Printer Setup",
      N_("Duplex/Tumble Setting"),
      STP_PARAMETER_TYPE_STRING_LIST, STP_PARAMETER_CLASS_FEATURE,
-@@ -2636,6 +2642,7 @@
+@@ -2636,6 +2644,7 @@
        /* media size codes for CD (and other media depending on printer model */
  
        if (!strcmp(name,"CD5Inch"))     return 0x53; /* CD Tray G --- arbitrary choice here, modify in ESC (P command */
@@ -21,7 +30,7 @@
        /* if (!strcmp(name,"CD5Inch"))  return 0x56; */ /* CD Tray G-late */
        /* if (!strcmp(name,"CD5Inch"))  return 0x57; */ /* CD Tray H */
  
-@@ -2877,6 +2884,9 @@
+@@ -2877,6 +2886,9 @@
            (description->bounds.str, "CD3Inch", _("CD - 3 inch"));
          stp_string_list_add_string
            (description->bounds.str, "CDCustom", _("CD - Custom"));
@@ -31,7 +40,7 @@
        }else{
  	  const stp_papersize_list_t *paper_sizes =
  	    stpi_get_standard_papersize_list();
-@@ -2947,8 +2957,8 @@
+@@ -2947,8 +2959,8 @@
  	   strcmp(name, "CDYAdjustment") == 0)
      {
        const char* input_slot = stp_get_string_parameter(v, "InputSlot");
@@ -42,7 +51,7 @@
        description->deflt.dimension = 0;
        if (!input_slot || !strcmp(input_slot,"CD"))
  	description->is_active = 1;
-@@ -3212,6 +3222,12 @@
+@@ -3212,6 +3224,12 @@
        else
  	description->is_active = 0;
      }
@@ -55,7 +64,7 @@
    else if (strcmp(name, "Duplex") == 0)
    {
      int offer_duplex=0;
-@@ -3321,7 +3337,7 @@
+@@ -3321,7 +3339,7 @@
    if (media_size)
      pt = stp_describe_papersize(v, media_size);
  
@@ -64,7 +73,19 @@
      cd = 1;
  
    stp_default_media_size(v, &width, &length);
-@@ -3846,8 +3862,13 @@
+@@ -3348,6 +3366,11 @@
+     right_margin = MAX(right_margin, caps->border_right);
+     top_margin = MAX(top_margin, caps->border_top);
+     bottom_margin = MAX(bottom_margin, caps->border_bottom);
++      /* TrayJ (MX920 disc tray, full face): honour the paper's own left margin. Raster column 0 is always placed at
++       the ESC (p origin (80 dots), so a larger left margin moves page content left on the tray: 12.84pt = 10pt +
++       the 1 mm correction measured on 2026-09-16. */
++    if (pt && media_size && !strcmp(media_size,"TrayJ") && !strcmp(caps->name,"PIXMA MX920"))
++      left_margin = pt->left;
+   }
+ 
+   /* temporarily limit to non-CD media until page size code moved here from do_print */
+@@ -3846,8 +3869,13 @@
  
    const char* input_slot = stp_get_string_parameter(v, "InputSlot");
    int print_cd = (input_slot && (!strcmp(input_slot, "CD")));
@@ -78,7 +99,7 @@
  
    test_cd = 1;
    /*
-@@ -4186,7 +4207,7 @@
+@@ -4186,7 +4214,7 @@
    }
  
    /* Tray J */
@@ -87,7 +108,7 @@
  
      init->page_width +=8;
      init->page_height +=44;
-@@ -4243,7 +4264,7 @@
+@@ -4243,7 +4271,7 @@
  
    if ((init->caps->features & CANON_CAP_px) ) {
      /* workaround for CD writing that uses CANON_CAP_px --- fix with capabilities */
@@ -96,7 +117,7 @@
        /* need to check if iP9910, MP710, iP3000, Pro9000 use Esc (p */
        {
  
-@@ -4313,7 +4334,7 @@
+@@ -4313,7 +4341,7 @@
  	  border_bottom2 = border_bottom + adjust_tray_H_bottom;
  	}
  
@@ -105,33 +126,38 @@
  	  border_left2   = border_left + adjust_tray_J_left;
  	  border_right2  = border_right + adjust_tray_J_right;
  	  border_top2    = border_top + adjust_tray_J_top;
-@@ -4330,6 +4351,12 @@
+@@ -4330,6 +4358,17 @@
  	/* this does not seem to need adjustment, so use original borders */
  	area_right = border_left * unit / 72;
  	area_top = border_top * unit / 72;
 +	/* TrayJ (whole tray face) on MX920: Canon's own tray-J origin is (80,70) @600dpi; +24 dots right = the measured 1 mm */
 +	trayj_mx920 = ( !(strcmp(init->caps->name,"PIXMA MX920")) && stp_get_string_parameter(v, "PageSize") && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ") );
 +	if ( trayj_mx920 ) {
-+	  area_right = 104;
-+	  area_top = 70;
++	  area_right = 80;       /* Canon's exact value: 56 (Canon-24) made the firmware abort the job after the tray scan */
++	  area_top = 70;         /* Canon's value; raising it moved the image TOWARD the leading edge, so it is not the down-shift lever */
++		  /* legacy medium fields: Canon's TrayJ job declares its 2911x5122 printable area here,
++	     (349.32+1)*5/6 = 292 and (614.64+1)*5/6 = 513. Declaring the 10.01in template page (580) instead
++	     tells the firmware the medium is 1.16in longer than the tray face. */
++	  printable_width  = 292;
++	  printable_length = 513;
 +	}
  
  	if ( (init->caps->features & CANON_CAP_BORDERLESS) &&
  	     !(print_cd) && stp_get_boolean_parameter(v, "FullBleed") ) {
-@@ -4375,7 +4402,11 @@
+@@ -4375,7 +4414,11 @@
  	  stp_put32_be((init->page_height - border_top2 - border_bottom2 ) * unit / 72,v); /* area_length */
  	}
  	else {
 -	  if ( (print_cd) && (test_cd==1) ) { /* bordered for CD */
 +	  if ( trayj_mx920 ) { /* TrayJ: Canon's printable area 2911x5122 minus the 24-dot right shift */
-+	    stp_put32_be(2887,v); /* area_width */
-+	    stp_put32_be(5122,v); /* area_length */
++	    stp_put32_be(2911,v); /* area_width  (Canon's) */
++	    stp_put32_be(5122,v); /* area_length (Canon's) */
 +	  }
 +	  else if ( (print_cd) && (test_cd==1) ) { /* bordered for CD */
  	    stp_put32_be(init->page_width * unit / 72,v); /* area_width */
  	    stp_put32_be(init->page_height * unit / 72,v); /* area_length */
  	  }
-@@ -5101,7 +5132,7 @@
+@@ -5101,7 +5144,7 @@
        canon_cmd(v,ESC28,0x72, 1, 0x68);
      }
      /* CD mode only -- no ESC (r at all otherwise */
@@ -140,7 +166,7 @@
        canon_cmd(v,ESC28,0x72, 1, 0x68); /* same as above case? */
      }
      /* other cases here */
-@@ -5731,7 +5762,7 @@
+@@ -5731,7 +5774,7 @@
  static void setup_page(stp_vars_t* v,canon_privdata_t* privdata){
    const char *media_source = stp_get_string_parameter(v, "InputSlot");
    const char *cd_type = stp_get_string_parameter(v, "PageSize");
@@ -149,11 +175,32 @@
    stp_dimension_t page_left,
                    page_top,
                    page_right,
-@@ -5902,13 +5933,14 @@
+@@ -5800,6 +5843,19 @@
+   } else {
+     privdata->left -= page_left;
+     privdata->top -= page_top; /* checked in Epson: matches */
++    /* MX920 + PageSize=TrayJ: the Brainstorm ID tray template is a 10.01in page, Canon's tray-J medium is 8.85in
++       (ESC (p 3071x5311). Acrobat + the Windows driver centre the page on the medium, so the template's card
++       positions assume the page top sits 0.58in above the medium's top edge. Gutenprint anchors the page top at the
++       medium's top and so printed every card 14.5mm too far toward the trailing edge (measured 2026-09-16).
++       Raster row 0 already sits 0.589in below the page top here, so sending no initial ESC (e advance reproduces
++       the centred placement to within 0.01in. */
++    if ( !(strcmp(canon_get_model_capabilities(v)->name,"PIXMA MX920")) && stp_get_string_parameter(v, "PageSize")
++         && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ") ) {
++      privdata->top = 0;
++      /* horizontal: privdata->left is already 0 here; the 1 mm left correction (2026-09-16) lives in the TrayJ
++         paper's left margin (standard.xml 12.84pt): raster column 0 sits at the ESC (p origin, so a larger page
++         margin moves the page content left. */
++    }
+     privdata->page_width = page_right - page_left; /* checked in Epson: matches */
+     privdata->page_height = page_bottom - page_top; /* checked in Epson: matches */
+   }
+@@ -5902,13 +5958,15 @@
  		out_channels;	/* Output bytes per pixel */
  #endif
    unsigned	zero_mask;
 -  int           print_cd = (media_source && (!strcmp(media_source, "CD")));
++  int           print_cd_slot = (media_source && (!strcmp(media_source, "CD")));
 +  int           print_cd = (media_source && (!strcmp(media_source, "CD")) && !(stp_get_string_parameter(v, "PageSize") && !strcmp(stp_get_string_parameter(v, "PageSize"), "TrayJ")));
    int           image_height;
  #if 0
@@ -165,15 +212,19 @@
    double outer_r_sq = 0;
    double inner_r_sq = 0;
    unsigned char* weave_cols[4] ; /* TODO clean up weaving code to be more generic */
-@@ -6290,6 +6322,7 @@
+@@ -6290,6 +6348,11 @@
    stp_allocate_component_data(v, "Driver", NULL, NULL, &privdata);
  
    privdata.emptylines = 0;
++  privdata.pending_empty_blocks = 0;
++  /* Canon's driver replaces blank raster blocks with ESC (e advances; the code path exists above but stays off:
++     blank ESC (F blocks print correctly on the MX922 and the advance variant has not been verified on paper. */
++  privdata.skip_empty_blocks = 0; (void)print_cd_slot;
 +  no_cd_mask = stp_get_boolean_parameter(v, "CDNoMask");
    if (print_cd) {
      cd_mask = stp_malloc(1 + (privdata.out_width + 7) / 8);
      outer_r_sq = (double)privdata.cd_outer_radius * (double)privdata.cd_outer_radius;
-@@ -6309,7 +6342,7 @@
+@@ -6309,7 +6372,7 @@
  	  break;
  	}
      }
@@ -182,7 +233,7 @@
        {
  	int x_center = privdata.cd_outer_radius * privdata.mode->xdpi / 72;
  	int y_distance_from_center =
-@@ -6334,7 +6367,7 @@
+@@ -6334,7 +6397,7 @@
  	      }
  	  }
        }
@@ -191,6 +242,34 @@
      if ( privdata.mode->flags & MODE_FLAG_WEAVE )
          stp_write_weave(v, weave_cols);
      else if ( caps->features & CANON_CAP_I)
+@@ -6658,9 +6721,25 @@
+     /* a new raster block begins */
+     if(!(y % raster_lines_per_block)){
+         if(y != 0){
+-            /* write finished blocks */
++            /* Canon's own driver never sends blank raster blocks: it skips blank bands with ESC (e advances
++               (captured MX922 job: ESC (e 9, 4 rows, ESC (e 107, then the inked rows). Do the same for the MX920
++               family in disc-tray mode: a block is empty when every channel compressed to one 0x80 terminator per
++               line, i.e. its length equals raster_lines_per_block. */
++            int all_empty = 1;
+             for(i=0;i<pd->num_channels;i++)
+-                canon_write_block(v,pd,pd->comp_buf + i * max_length,pd->channels[i].comp_buf_offset);
++                if((pd->channels[i].comp_buf_offset - (pd->comp_buf + i * max_length)) != raster_lines_per_block)
++                    all_empty = 0;
++            if(all_empty && pd->skip_empty_blocks){
++                pd->pending_empty_blocks += 1;
++            } else {
++                if(pd->pending_empty_blocks){
++                    canon_cmd(v,ESC28,0x65, 2, (pd->pending_empty_blocks >> 8) & 0xff, pd->pending_empty_blocks & 0xff);
++                    pd->pending_empty_blocks = 0;
++                }
++                /* write finished blocks */
++                for(i=0;i<pd->num_channels;i++)
++                    canon_write_block(v,pd,pd->comp_buf + i * max_length,pd->channels[i].comp_buf_offset);
++            }
+         }
+         /* reset start offsets */
+         for(i=0;i<pd->num_channels;i++)
 --- a/src/main/canon-printers.h
 +++ b/src/main/canon-printers.h
 @@ -3593,7 +3593,7 @@
@@ -213,7 +292,7 @@
 +      <comment value="Canon disc tray J, whole tray face 5.16x10.01in (PVC card trays)"/>
 +      <width value="371.52"/>
 +      <height value="720.72"/>
-+      <left value="9.6"/>
++      <left value="12.84"/>
 +      <right value="15.4"/>
 +      <top value="50.8"/>
 +      <bottom value="55.3"/>

@@ -21,7 +21,7 @@ The only Linux driver that handled this was a paid one.
 
 ## What the patch does
 
-Twenty hunks across `src/main/print-canon.c`, `src/main/canon-printers.h` and `src/xml/papers/standard.xml`:
+Twenty-four hunks across `src/main/print-canon.c`, `src/main/canon-printers.h` and `src/xml/papers/standard.xml`:
 
 1. **`StpCDNoMask`** — a new boolean option, *"CD tray: no disc mask"*. When true the driver skips the
    circular disc/hub mask and dithers the whole square CD page (120 × 120 mm for `CD5Inch`).
@@ -40,15 +40,22 @@ Twenty hunks across `src/main/print-canon.c`, `src/main/canon-printers.h` and `s
    driver sends — verified against a captured Canon job (`ESC (P`, `ESC (l`, `ESC (c`, `ESC (r` byte-identical).
 
 5. **`PageSize=TrayJ`** — a new page: the whole disc-tray face, 5.16 × 10.01 in, fed from the CD slot with
-   ordinary margins and no disc mask or disc centring. It is the page Brainstorm ID's templates and Canon's
-   "Disc Tray J" paper size describe, so their PDFs print unchanged:
+   ordinary margins and no disc mask or disc centring. It is the page Brainstorm ID's templates describe, so their
+   PDFs print unchanged:
    `lp -o InputSlot=CD -o PageSize=TrayJ -o MediaType=DiscCompat -o Resolution=606x600dpi template.pdf`.
-   Offered for the MX920 and iP7200 (tray J models). On the MX920 the page is emitted with Canon's own tray-J
-   numbers (page 3071×5311, printable 2911×5122, origin 80,70 at 600 dpi) — captured from Canon's Windows driver —
-   with the PDF's card region mapped onto it through the paper margins, so a Brainstorm template lands where the
-   Windows driver puts it, at 100% scale. Measured on 2026-09-15: gutenprint's first attempt sat 15 mm high because
-   it declared a 10.01-in page and the printer positions the declared page on the tray; declaring Canon's 8.85-in
-   page fixed it. A 1 mm rightward correction is baked in as +24 dots.
+   Offered for the MX920 and iP7200 (tray J models). On the MX920 every header command in the job is byte-identical
+   to Canon's own Windows driver (captured tray-J job): `ESC (p` with page 3071×5311, printable 2911×5122, origin
+   80,70 at 600 dpi, and the legacy medium fields 292×513.
+
+   **Where the cards land** (the part that cost a week): Canon's tray-J medium is **8.85 in** long, Brainstorm's
+   template page is **10.01 in**. On Windows the PDF viewer centres the page on the medium, so the template's card
+   positions assume the page top sits 0.58 in *above* the medium's top edge. Gutenprint anchors the page top *at*
+   the medium's top edge and printed every card 14.5 mm too far toward the trailing edge, no matter what the PDF or
+   the paper advance said. The patch therefore sends **no initial paper advance** for `TrayJ` on the MX920: with
+   the page's 50.8 pt top margin that reproduces the centred placement to within 0.01 in. Horizontally, raster
+   column 0 always sits at the `ESC (p` origin, so the page's *left margin* is the lever: `TrayJ` uses 12.84 pt
+   (10 pt + a measured 1 mm), and the driver lets that paper margin through its 10 pt minimum-border clamp.
+   Verified on 2026-09-16: Brainstorm's unmodified template prints its card outlines on the card edges.
 
 Everything else — disc media codes, resolution modes — is stock Gutenprint.
 
@@ -59,15 +66,15 @@ Everything else — disc media codes, resolution modes — is stock Gutenprint.
 ./build.sh
 ```
 
-`build.sh` fetches the distro source package, applies the patch, **bumps the version to `…+cardtray1`**,
+`build.sh` fetches the distro source package, applies the patch, **bumps the version to `…+cardtray24`**,
 builds with `dpkg-buildpackage`, installs `libgutenprint-common libgutenprint9 printer-driver-gutenprint`,
 pins them with `apt-mark hold`, and regenerates the PPDs of existing Gutenprint queues.
-Prebuilt `.deb`s for Ubuntu 26.04 are attached to the GitHub release.
+Prebuilt `.deb`s for Ubuntu 26.04 (`…+cardtray24`) are attached to the GitHub release.
 
 **Why the version bump matters** (learned the hard way, 2026-09-15): a patched build that keeps the stock
 version string is one `unattended-upgrades` run away from being replaced by the archive's identical-version
 package — and `dpkg -i` silently clears an existing `apt-mark hold`, so "I held it" is not enough. With the
-`+cardtray1` suffix the archive is never a candidate, and the hold is belt-and-braces.
+`+cardtrayN` suffix the archive is never a candidate, and the hold is belt-and-braces.
 
 The Canon driver is a loadable module; `grep -a -c CDNoMask /usr/lib/*/gutenprint/5.3/modules/print-canon.so`
 prints `1` when the patched build is live.
@@ -77,25 +84,27 @@ prints `1` when the patched build is live.
 Add the printer with the Gutenprint PPD (it does not show in `lpinfo -m`; use the driver URI directly):
 
 ```bash
-sudo apt install cups-backend-bjnp
-sudo lpadmin -p canon-mx922 -E -v bjnp://<printer-ip> -m 'gutenprint.5.3://bjc-PIXMA-MX922/expert'
+sudo lpadmin -p canon-mx922 -E -v ipp://<printer-ip>/ipp/print -m 'gutenprint.5.3://bjc-PIXMA-MX922/expert'
 ```
 
-Prepare a **120 × 120 mm page** with your card artwork placed where the cards sit relative to the tray's disc
-centre (for the Brainstorm J tray: two 2.125 × 3.375 in cards, 0.295 in apart, block centred), then:
+IPP as the transport, not BJNP: on the MX922 the BJNP backend dropped multi-megabyte tray jobs mid-send.
+
+Print a **5.16 × 10.01 in page** laid out like Brainstorm ID's Canon-J template (two 2.125 × 3.375 in cards,
+top edges 3.67 in from the page top, left edges at 0.325 in and 2.745 in) — their own template PDFs work as-is:
 
 ```bash
-lp -d canon-mx922 -o InputSlot=CD -o PageSize=CD5Inch -o MediaType=DiscOthers \
-   -o Resolution=606x600dpi -o StpCDNoMask=True -o fit-to-page=false \
-   -o StpCDXAdjustment=0 -o StpCDYAdjustment=0 cards.pdf
+lp -d canon-mx922 -o InputSlot=CD -o PageSize=TrayJ -o MediaType=DiscCompat \
+   -o Resolution=606x600dpi -o StpCDNoMask=True -o fit-to-page=false cards.pdf
 ```
 
-Print with the tray **out**; the printer stops and asks for it. Calibrate once by taping plain paper over the
-empty slots and printing card outlines, then set the X/Y adjustments (points; +X right, +Y down). Cards must be
-**inkjet-printable PVC** — plain glossy PVC won't hold ink.
+Print with the tray **out**; the printer stops and asks for it, and gives up after a few minutes if nobody
+inserts it (the job then stays queued and retries when you press OK). Cards must be **inkjet-printable PVC** —
+plain glossy PVC won't hold ink. The older `PageSize=CD5Inch` route (120 × 120 mm page, disc mask off,
+`StpCDXAdjustment`/`StpCDYAdjustment` to walk the block onto the slots) still works for printers without a
+tray-J page.
 
-A generator that lays out CR80 label artwork on this page (and on the maker's 5.16 × 10.01 in Windows/macOS
-tray page) lives in the author's labels tooling; any PDF of the right size works.
+A generator that lays out CR80 label artwork on this page lives in the author's labels tooling; any PDF of the
+right size works.
 
 ## Compatibility
 
