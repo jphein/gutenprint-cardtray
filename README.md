@@ -84,10 +84,14 @@ prints `1` when the patched build is live.
 Add the printer with the Gutenprint PPD (it does not show in `lpinfo -m`; use the driver URI directly):
 
 ```bash
-sudo lpadmin -p canon-mx922 -E -v ipp://<printer-ip>/ipp/print -m 'gutenprint.5.3://bjc-PIXMA-MX922/expert'
+sudo lpadmin -p canon-mx922 -E -v lpd://<printer-ip>/lp -m 'gutenprint.5.3://bjc-PIXMA-MX922/expert'
 ```
 
-IPP as the transport, not BJNP: on the MX922 the BJNP backend dropped multi-megabyte tray jobs mid-send.
+**Use LPD as the transport.** On the MX922 both BJNP and IPP dropped multi-megabyte tray jobs mid-print: the
+printer ingests a streamed job slowly, prints band by band, and eventually times out the connection (IPP:
+"Unable to add document to print job", a third of the way down the cards). Over LPD the spooled file lands
+in seconds and the head runs at full speed. Small jobs (card outlines) work over any transport, which hides
+the problem until the first full-bleed page.
 
 Print a **5.16 × 10.01 in page** laid out like Brainstorm ID's Canon-J template (two 2.125 × 3.375 in cards,
 top edges 3.67 in from the page top, left edges at 0.325 in and 2.745 in) — their own template PDFs work as-is:
