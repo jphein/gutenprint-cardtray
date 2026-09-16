@@ -21,7 +21,7 @@ The only Linux driver that handled this was a paid one.
 
 ## What the patch does
 
-Nine hunks across `src/main/print-canon.c` and `src/main/canon-printers.h`:
+Twelve hunks across `src/main/print-canon.c` and `src/main/canon-printers.h`:
 
 1. **`StpCDNoMask`** — a new boolean option, *"CD tray: no disc mask"*. When true the driver skips the
    circular disc/hub mask and dithers the whole square CD page (120 × 120 mm for `CD5Inch`).
@@ -34,8 +34,12 @@ Nine hunks across `src/main/print-canon.c` and `src/main/canon-printers.h`:
    `CANON_CAP_rr` capability that gates the code path, so the printer accepted disc jobs and silently discarded
    them (IPP job "completed, 0 impressions"). The patch adds both.
 
-Everything else — tray selection (`ESC (P … 0x5b` for tray J), disc media codes, resolution modes — is stock
-Gutenprint.
+4. **MX920 tray J page geometry** — Gutenprint routed the MX920's CD jobs to the legacy 8-byte `ESC (p` page
+   command; the printer scans the tray and ejects it unprinted. The MX920 now takes the same path as the
+   iP7200 (extended 46-byte `ESC (p` with the tray-J border adjustments), which is what Canon's own Windows
+   driver sends — verified against a captured Canon job (`ESC (P`, `ESC (l`, `ESC (c`, `ESC (r` byte-identical).
+
+Everything else — disc media codes, resolution modes — is stock Gutenprint.
 
 ## Install (Ubuntu / Debian)
 

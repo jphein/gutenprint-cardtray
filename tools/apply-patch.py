@@ -74,8 +74,17 @@ old5 = ('!(strcmp(init->caps->name,"PIXMA MG8200")) || !(strcmp(init->caps->name
 assert s.count(old5) == 1, "ESC (r CD-mode list anchor not found exactly once"
 s = s.replace(old5, old5.replace('"PIXMA TS8000")) ) ) {', '"PIXMA TS8000")) || !(strcmp(init->caps->name,"PIXMA MX920")) ) ) {'), 1)
 
+# 6/7. MX920 tray J page geometry: route CD jobs through the extended ESC (p path with the iP7200's tray-J
+#      border adjustments (the printer rejects the legacy 8-byte ESC (p after scanning the tray)
+a6 = 'if ( (print_cd) && !(strcmp(init->caps->name,"PIXMA iP7200")) && (test_cd==1) ) {'
+assert s.count(a6) == 2, "tray-J blocks (page-dimension + border adjust) anchor not found exactly twice"
+s = s.replace(a6, 'if ( (print_cd) && ( !(strcmp(init->caps->name,"PIXMA iP7200")) || !(strcmp(init->caps->name,"PIXMA MX920")) ) && (test_cd==1) ) {')
+a7 = '|| !(strcmp(init->caps->name,"PIXMA iP7200")) || !(strcmp(init->caps->name,"PIXMA MP980"))'
+assert s.count(a7) == 1, "extended ESC (p exception-list anchor not found exactly once"
+s = s.replace(a7, '|| !(strcmp(init->caps->name,"PIXMA iP7200")) || !(strcmp(init->caps->name,"PIXMA MX920")) || !(strcmp(init->caps->name,"PIXMA MP980"))', 1)
+
 changes = sum(1 for a, b in zip(n0.splitlines(), s.splitlines()) if a != b) + abs(len(s.splitlines()) - len(n0.splitlines()))
-for anchor in ('"CDNoMask", N_', 'strcmp(name, "CDNoMask")', 'dimension.upper = 120;', 'no_cd_mask = stp_get_boolean', '!no_cd_mask)', 'no_cd_mask ? NULL', 'int no_cd_mask = 0', '"PIXMA MX920")) ) ) {'):
+for anchor in ('"CDNoMask", N_', 'strcmp(name, "CDNoMask")', 'dimension.upper = 120;', 'no_cd_mask = stp_get_boolean', '!no_cd_mask)', 'no_cd_mask ? NULL', 'int no_cd_mask = 0', '"PIXMA MX920")) ) ) {', '"PIXMA MX920")) ) && (test_cd==1) ) {', '"PIXMA MX920")) || !(strcmp(init->caps->name,"PIXMA MP980"))'):
     assert anchor in s, f"missing: {anchor}"
 open(p, "w").write(s); print(f"patched {p} (~{changes} lines changed)")
 
